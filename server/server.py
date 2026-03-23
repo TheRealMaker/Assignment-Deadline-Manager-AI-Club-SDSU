@@ -1,32 +1,57 @@
-# This program will look at Canvas assignments and return their information.
-
-# server/test_get_grade.py
+import socket
+import os
 from canvasapi import Canvas
 from dotenv import load_dotenv
-import os
 
-load_dotenv()  # loads .env in same folder or parent
+load_dotenv()
+print("Loaded .env values:")
+print("CANVAS_API_URL:", os.getenv("CANVAS_API_URL"))
 
 CANVAS_API_URL = os.getenv("CANVAS_API_URL")
-CANVAS_API_TOKEN = os.getenv("CANVAS_API_TOKEN")
-COURSE_ID = os.getenv("COURSE_ID")  # the numeric course id
+token_saved = ""
 
-if not CANVAS_API_URL or not CANVAS_API_TOKEN or not COURSE_ID:
-    raise SystemExit("Missing CANVAS_API_URL, CANVAS_API_TOKEN, or COURSE_ID in environment.")
+def getToken(token_value):
+    global token_saved
+    token_saved = token_value
+    print(f"Token received and saved: {token_saved}")  # Added print
+    return f"Token '{token_saved}' saved successfully."
 
-canvas = Canvas(CANVAS_API_URL, CANVAS_API_TOKEN)
+def fetch_canvas_data():
+    if not token_saved:
+        return "Canvas token never acquired, please retry."
+    if not CANVAS_API_URL:
+        return "Canvas API is not correct, please change."
+    try:
+        print("This is an attempt on this object!")
+        # Intialize the Canvas object:
+        canvas = Canvas(CANVAS_API_URL, token_saved)
+        print(canvas)
+        user = canvas.get_user('self')
+        print(user)
+        print(user.name)
+        return f"Canvas user: {user}"
+    except Exception as e:
+        return f"Canvas Error detected! Program has ended."
 
-# this fetches the current user's enrollment in the course and prints the computed current score
-course = canvas.get_course(int(COURSE_ID))
+def start_server():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind(('localhost', 12345))
+    server_socket.listen(1)
+    print("Server listening on localhost:12345")
+    
+    while True:
+        client_socket, addr = server_socket.accept()
+        print(f"Connection from {addr}")
+        token = client_socket.recv(1024).decode('utf-8')
+        print(f"Raw token received: {token}")  # Added print for raw input
+        response = getToken(token)
+        # Optionally fetch and print Canvas data
+        canvas_result = fetch_canvas_data()
+        print(f"Canvas result: {canvas_result}")  # Added print
+        full_response = f"{response}\n{canvas_result}"
+        client_socket.send(full_response.encode('utf-8'))
+        client_socket.close()
 
-# Get the current user's grades via the enrollments endpoint for the current user
-# Note: get_enrollments requires appropriate permissions on Canvas side for other students; for own grades this works.
-enrollments = course.get_enrollments(user_id='self')  # 'self' fetches current user
-for enr in enrollments:
-    print("Course:", course.name)
-    print("Computed current score:", enr.grades.get('computed_current_score'))
-    print("Current grade:", enr.grades.get('current_score'))
-    print("Current grade string:", enr.grades.get('current_grade'))
-
-    # OAuth 2.0 -- Research this topic, YouTube topic to develop a better understanding.
+if __name__ == "__main__":
+    start_server()
 
