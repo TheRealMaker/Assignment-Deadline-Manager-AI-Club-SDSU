@@ -21,7 +21,7 @@ def send_token_to_server(token):
     except Exception as e:
         print("Error connecting to server:", e)
 
-# button 
+# Button that opens up the chance to respond 
 def button_click_event():
     global secret_token
     dialog = customtkinter.CTkInputDialog(text="Type in your token below:", title="Test")
