@@ -3,7 +3,7 @@ import os
 from canvasapi import Canvas
 from dotenv import load_dotenv
 from google import genai
-from google import types
+from google.genai import types
 
 load_dotenv()
 print("Loaded .env values:")
@@ -61,11 +61,11 @@ def start_server():
         print(f"Raw token received: {token}") 
         response = getToken(token)
         # Optionally fetch and print Canvas data
-        canvas_result = fetch_canvas_data()
-        print(f"Canvas result: {canvas_result}")
-        full_response = f"{response}\n{canvas_result}"
-        client_socket.send(full_response.encode('utf-8'))
-        client_socket.close()
+        # canvas_result = fetch_canvas_data()
+        # print(f"Canvas result: {canvas_result}")
+        # full_response = f"{response}\n{canvas_result}"
+        # client_socket.send(full_response.encode('utf-8'))
+        # client_socket.close()
 
 if __name__ == "__main__":
     start_server()

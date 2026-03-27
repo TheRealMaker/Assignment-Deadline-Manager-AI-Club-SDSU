@@ -22,7 +22,7 @@ def send_token_to_server(token):
         print("Error connecting to server:", e)
 
 # Button that opens up the chance to respond 
-def button_click_event():
+def token_click_event():
     global secret_token
     dialog = customtkinter.CTkInputDialog(text="Type in your token below:", title="Test")
     secret_token = dialog.get_input()
@@ -30,10 +30,23 @@ def button_click_event():
     if secret_token:
         send_token_to_server(secret_token)
 
+def AI_click_event():
+    print("Test")
+
+
 # Button that allows for inputting login token
-button = customtkinter.CTkButton(app, text="Open Login Request", command=button_click_event)
+button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)
 button.pack(padx=20, pady=20)
 
 print("You are now logged in: ", secret_token)
+
+# Textbox that allows you to ask a question to the LLM
+textbox = customtkinter.CTkTextbox(app, width = 400, height = 200)
+textbox.pack(padx = 20, pady=20)
+
+textbox.insert("0.0", "Please enter your inqueries here!")
+
+content = textbox.get("0.0", "end")
+
 
 app.mainloop()
