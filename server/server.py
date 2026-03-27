@@ -42,9 +42,13 @@ def fetch_canvas_data():
     canvas = Canvas(CANVAS_API_URL, token_saved)
     user = canvas.get_user('self')
     print(user)
-    courses = user.get_courses('self')
+    courses = canvas.get_courses()
     for course in courses:
-        print(course)
+        # This needs to be here because some courses are no longer used
+        if not hasattr(course, 'name'):
+            continue
+        print(course.name)
+    print (courses.get_course_level_assignment_data())
     return f"Canvas user: {user}"
 
 
