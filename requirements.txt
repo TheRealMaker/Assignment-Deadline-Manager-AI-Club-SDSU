@@ -1,0 +1,4 @@
+canvasapi
+dotenv
+google
+customtkinter

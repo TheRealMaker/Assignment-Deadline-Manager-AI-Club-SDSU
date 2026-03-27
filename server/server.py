@@ -41,9 +41,10 @@ def fetch_canvas_data():
     # Intialize the Canvas object:
     canvas = Canvas(CANVAS_API_URL, token_saved)
     user = canvas.get_user('self')
-    # courses = user.get_courses()
-    # for course in courses:
-    #    print(course)
+    print(user)
+    courses = user.get_courses('self')
+    for course in courses:
+        print(course)
     return f"Canvas user: {user}"
 
 
@@ -61,11 +62,11 @@ def start_server():
         print(f"Raw token received: {token}") 
         response = getToken(token)
         # Optionally fetch and print Canvas data
-        # canvas_result = fetch_canvas_data()
-        # print(f"Canvas result: {canvas_result}")
-        # full_response = f"{response}\n{canvas_result}"
-        # client_socket.send(full_response.encode('utf-8'))
-        # client_socket.close()
+        canvas_result = fetch_canvas_data()
+        print(f"Canvas result: {canvas_result}")
+        full_response = f"{response}\n{canvas_result}"
+        client_socket.send(full_response.encode('utf-8'))
+        client_socket.close()
 
 if __name__ == "__main__":
     start_server()
