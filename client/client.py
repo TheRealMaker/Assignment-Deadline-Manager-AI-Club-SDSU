@@ -46,29 +46,25 @@ def open_new_window():
     for course in final_result:
         course_list.append(course["name"])
     new_window = customtkinter.CTkToplevel()
-    new_window.title = ("New Window")
-    new_window.geometry = ("800x600")
+    new_window.title("New Window")
+    new_window.geometry("800x600")
 
     for course in course_list:
       if "Homeroom" not in course and "Tech How-to" not in course:
             label = customtkinter.CTkLabel(new_window, text = course)
             label.pack(pady = 20)
 
+    # Textbox that allows you to ask a question to the LLM
+    textbox = customtkinter.CTkTextbox(new_window, width = 400, height = 200)
+    textbox.pack(padx = 20, pady=20)
+
+    textbox.insert("0.0", "Please enter your inqueries here!")
+    content = textbox.get("0.0", "end")
+
 # Button that allows for inputting login token
 button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)
 button.pack(padx=20, pady=20)
 
 print("You are now logged in: ", secret_token)
-
-# Textbox that allows you to ask a question to the LLM
-textbox = customtkinter.CTkTextbox(app, width = 400, height = 200)
-textbox.pack(padx = 20, pady=20)
-
-textbox.insert("0.0", "Please enter your inqueries here!")
-
-content = textbox.get("0.0", "end")
-
-button = customtkinter.CTkButton(app, text="Open Window", command=open_new_window)
-button.pack(pady=20)
 
 app.mainloop()
