@@ -52,7 +52,7 @@ def fetch_canvas_data():
 
     unlock_dates = fetch_unlock_date(assignments)
 
-    return f"Canvas user: {user} data acquired."
+    return courses
 
 def fetch_user_data(canvas_data):
     user = canvas_data.get_user('self')
@@ -78,13 +78,13 @@ def fetch_submission_time(assignments, user):
     all_submissions = []
     for assignment in assignments:
         submission = assignment.get_submission(user)
-        all_submissions.extend(submission)
+        all_submissions.append(submission)
     return all_submissions
 
 def fetch_unlock_date(assignments):
     all_due_dates = []
     for assignment in assignments:
-        all_due_dates.extend(assignment.created_at)
+        all_due_dates.append(assignment.created_at)
     return all_due_dates
     
 
@@ -99,15 +99,26 @@ def start_server():
     while True:
         client_socket, addr = server_socket.accept()
         print(f"Connection from {addr}")
-        token = client_socket.recv(1024).decode('utf-8')
+        token = client_socket.recv(4096).decode('utf-8')
         print(f"Raw token received: {token}") 
         response = getToken(token)
         # Optionally fetch and print Canvas data
         canvas_result = fetch_canvas_data()
+        print(type(canvas_result))
         print(f"Canvas result: {canvas_result}")
-        full_response = f"{response}\n{canvas_result}"
-        client_socket.send(full_response.encode('utf-8'))
-        client.socket.send(canvas_result.encode('utf-8'))
+
+        data = {
+            "response": response,
+            "courses": [
+                {
+                    "name": course.name,
+                    "course_code": course.course_code
+                }
+                for course in canvas_result
+            ]
+        }
+        response = json.dumps(data)
+        client_socket.send(response.encode('utf-8'))
         client_socket.close()
 
 if __name__ == "__main__":

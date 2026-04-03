@@ -16,31 +16,44 @@ def send_token_to_server(token):
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect(('localhost', 12345))
         client_socket.send(token.encode('utf-8'))
-        response = client_socket.recv(1024).decode('utf-8')
+        response = client_socket.recv(4096).decode('utf-8')
         print("Server response:", response)
+        data = json.loads(response)
+
+        print("Courses:", data["courses"])
+
         client_socket.close()
+        return data["courses"]
     except Exception as e:
         print("Error connecting to server:", e)
 
 # Button that opens up the chance to respond 
 def token_click_event():
     global secret_token
+    global final_result 
     dialog = customtkinter.CTkInputDialog(text="Type in your token below:", title="Test")
     secret_token = dialog.get_input()
     print("You are now logged in: ", secret_token)
     if secret_token:
-        send_token_to_server(secret_token)
+        final_result = send_token_to_server(secret_token)
+    open_new_window()
 
 def AI_click_event():
     print("Test")
 
 def open_new_window():
+    course_list = []
+    for course in final_result:
+        course_list.append(course["name"])
     new_window = customtkinter.CTkToplevel()
     new_window.title = ("New Window")
-    new_window.geometry = ("400X300")
+    new_window.geometry = ("800x600")
 
-    label = customtkinter.CTkLabel(new_window, text = "This is our new window")
-    label.pack(pady = 20)
+    for course in course_list:
+      if "Homeroom" not in course and "Tech How-to" not in course:
+            label = customtkinter.CTkLabel(new_window, text = course)
+            label.pack(pady = 20)
+
 # Button that allows for inputting login token
 button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)
 button.pack(padx=20, pady=20)
