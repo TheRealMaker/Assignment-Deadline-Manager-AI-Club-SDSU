@@ -1,5 +1,6 @@
 import customtkinter
 import socket
+import json
 
 # Generates a basic app
 app = customtkinter.CTk()
@@ -33,7 +34,13 @@ def token_click_event():
 def AI_click_event():
     print("Test")
 
+def open_new_window():
+    new_window = customtkinter.CTkToplevel()
+    new_window.title = ("New Window")
+    new_window.geometry = ("400X300")
 
+    label = customtkinter.CTkLabel(new_window, text = "This is our new window")
+    label.pack(pady = 20)
 # Button that allows for inputting login token
 button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)
 button.pack(padx=20, pady=20)
@@ -48,5 +55,7 @@ textbox.insert("0.0", "Please enter your inqueries here!")
 
 content = textbox.get("0.0", "end")
 
+button = customtkinter.CTkButton(app, text="Open Window", command=open_new_window)
+button.pack(pady=20)
 
 app.mainloop()

@@ -1,5 +1,6 @@
 import socket
 import os
+import json
 from canvasapi import Canvas
 from dotenv import load_dotenv
 from google import genai
@@ -37,19 +38,55 @@ def fetch_canvas_data():
         return "Canvas token never acquired, please retry."
     if not CANVAS_API_URL:
         return "Canvas API is not correct, please change."
-    print("This is an attempt on this object!")
-    # Intialize the Canvas object:
     canvas = Canvas(CANVAS_API_URL, token_saved)
-    user = canvas.get_user('self')
-    print(user)
-    courses = canvas.get_courses()
+
+    user = fetch_user_data(canvas)
+
+    # Grab courses that are currently active for the user
+    courses = fetch_courses_data(canvas)
+
+    # Grab all the submission dates for each
+    assignments = fetch_assignment_data(courses)
+
+    submissions = fetch_submission_time(assignments, user)
+
+    unlock_dates = fetch_unlock_date(assignments)
+
+    return f"Canvas user: {user} data acquired."
+
+def fetch_user_data(canvas_data):
+    user = canvas_data.get_user('self')
+    return user
+
+def fetch_courses_data(canvas):
+    courses = canvas.get_courses(enrollment_state='active',
+    enrollment_type='student')
+    return list(courses)
+
+def fetch_assignment_data(courses):
+    all_assignments = []
     for course in courses:
         # This needs to be here because some courses are no longer used
         if not hasattr(course, 'name'):
             continue
-        print(course.name)
-    print (courses.get_course_level_assignment_data())
-    return f"Canvas user: {user}"
+        # Grab all the assignments for each course 
+        assignments = course.get_assignments()
+        all_assignments.extend(assignments)
+    return all_assignments
+
+def fetch_submission_time(assignments, user):
+    all_submissions = []
+    for assignment in assignments:
+        submission = assignment.get_submission(user)
+        all_submissions.extend(submission)
+    return all_submissions
+
+def fetch_unlock_date(assignments):
+    all_due_dates = []
+    for assignment in assignments:
+        all_due_dates.extend(assignment.created_at)
+    return all_due_dates
+    
 
 
 # Begin local host server to allow for two programs to run at once
@@ -70,6 +107,7 @@ def start_server():
         print(f"Canvas result: {canvas_result}")
         full_response = f"{response}\n{canvas_result}"
         client_socket.send(full_response.encode('utf-8'))
+        client.socket.send(canvas_result.encode('utf-8'))
         client_socket.close()
 
 if __name__ == "__main__":
