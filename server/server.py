@@ -6,7 +6,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-load_dotenv()
+# Load dot environment
+load_dotenv() 
 print("Loaded .env values:")
 print("CANVAS_API_URL:", os.getenv("CANVAS_API_URL"))
 
@@ -40,18 +41,8 @@ def fetch_canvas_data():
         return "Canvas API is not correct, please change."
     canvas = Canvas(CANVAS_API_URL, token_saved)
 
-    user = fetch_user_data(canvas)
-
     # Grab courses that are currently active for the user
     courses = fetch_courses_data(canvas)
-
-    # Grab all the submission dates for each
-    assignments = fetch_assignment_data(courses)
-
-    submissions = fetch_submission_time(assignments, user)
-
-    unlock_dates = fetch_unlock_date(assignments)
-
     return courses
 
 def fetch_user_data(canvas_data):
@@ -86,10 +77,10 @@ def fetch_unlock_date(assignments):
     for assignment in assignments:
         all_due_dates.append(assignment.created_at)
     return all_due_dates
-    
 
 
-# Begin local host server to allow for two programs to run at once
+
+# Begin local host server to allow for two programs to communicate with one another
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_socket.bind(('localhost', 12345))
@@ -97,28 +88,36 @@ def start_server():
     print("Server listening on localhost:12345")
     
     while True:
+        # Create a clent socket and what we'll be adding
         client_socket, addr = server_socket.accept()
         print(f"Connection from {addr}")
-        token = client_socket.recv(4096).decode('utf-8')
-        print(f"Raw token received: {token}") 
-        response = getToken(token)
-        # Optionally fetch and print Canvas data
-        canvas_result = fetch_canvas_data()
-        print(type(canvas_result))
-        print(f"Canvas result: {canvas_result}")
+        # Allows us to transmit more bytes to allow for quicker transfer of larger data
+        raw = client_socket.recv(65536).decode('utf-8')
+        print(f"Raw data received: {raw}") 
+        # Response allows us to obtain a token
+        data = json.loads(raw)
 
-        data = {
-            "response": response,
-            "courses": [
-                {
-                    "name": course.name,
-                    "course_code": course.course_code
-                }
-                for course in canvas_result
-            ]
-        }
-        response = json.dumps(data)
-        client_socket.send(response.encode('utf-8'))
+        # Convert our data into JSON for our course information
+        # Later we can use the same server to collect the data for assignments later, not all at once.
+        if data["type"] == "courses":
+            getToken(data["token"])
+            # Optionally fetch and print Canvas data
+            canvas_result = fetch_canvas_data()
+            response = {
+                "courses": [{"name": course.name,"course_code": course.course_code} for course in canvas_result]
+            }
+        # Grab course assignments and their data
+        elif data["type"] == "assignments":
+            canvas_result = fetch_canvas_data()
+            assignment_result = fetch_assignment_data(canvas_result)
+            # Each assginment has their name and their due date, could easily implement when they submitted the assignment too
+            response = {
+                "assignments": [{"name": assignment.name, "due_at": assignment.due_at} for assignment in assignment_result]
+            }
+            
+        # Convert JSON with data
+        final_response = json.dumps(response)
+        client_socket.send(final_response.encode('utf-8'))
         client_socket.close()
 
 if __name__ == "__main__":
