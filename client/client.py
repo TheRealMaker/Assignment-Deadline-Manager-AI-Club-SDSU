@@ -29,20 +29,35 @@ def send_token_to_server(token):
     except Exception as e:
         print("Error connecting to server:", e)
 
-# Function to send token to the server
+# Function to send assignments and submissions to the server
 def send_assignments_to_server(course_id):
     try: 
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect(('localhost', 12345))
-        # Need to adjust the course_id to include an extra string index to parse different requests
-        request = json.dumps({"type": "assignments", "course_id": course_id})
+        request = json.dumps({
+            "type": "assignments",
+            "token": secret_token, 
+            "course_id": course_id
+        })
         client_socket.send(request.encode('utf-8'))
-        # Increase the amount of data passed from client to server significantly
         response = client_socket.recv(65536).decode('utf-8') 
         print("Server response for assignments:", response)
         data = json.loads(response)
         client_socket.close()
         return data["assignments"]
+    except Exception as e:
+        print("Error connecting to the server:", e)
+
+def send_ai_question_to_server(prompt):
+    try: 
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.connect(('localhost', 12345))
+        request = json.dumps({"type": "ai_question", "response": prompt})
+        client_socket.send(request.encode('utf-8'))
+        raw_response = client_socket.recv(65536).decode('utf-8')  # no longer shadows prompt
+        data = json.loads(raw_response)
+        client_socket.close()
+        return data["ai_response"]
     except Exception as e:
         print("Error connecting to the server:", e)
 
@@ -59,37 +74,43 @@ def token_click_event():
 
 # Will generate the list of assignments required for each course
 def couse_click_event(course, course_table):
+    # LLM will take this JSON information and apply it to its question
+    global course_assignments
     print(f"The {course} button was clicked!")
     course_code = course_table.get(course)
     print(f"The course id is: {course_code}.")
     # Verify that the course assignments have been obtained for the specific course
     course_assignments = send_assignments_to_server(course_code)
     print(course_assignments)
+    open_chat_window()
 
-# Creates new window to generate new courses to the user
 def open_new_window():
-    # Initialize a key-value pair hash function to allow for instant access and for fetching assignments
     course_table = {}
     for course in final_result:
-        course_table[course["name"]] = course["course_code"]
+        course_table[course["name"]] = course["id"]
 
-    # Fetch from the assignments
     new_window = customtkinter.CTkToplevel()
     new_window.title("New Window")
     new_window.geometry("800x600")
 
-# Obtain courses that only pertain to what the user is currently taking
     for course in course_table:
-      if "Homeroom" not in course and "Tech How-to" not in course:
-            label = customtkinter.CTkButton(new_window, text = course, command = lambda c=course: couse_click_event(c, course_table))
-            label.pack(pady = 20)
+        if "Homeroom" not in course and "Tech How-to" not in course:
+            label = customtkinter.CTkButton(new_window, text=course, command=lambda c=course: couse_click_event(c, course_table))
+            label.pack(pady=20)
 
-    # Textbox that allows you to ask a question to the LLM
-    textbox = customtkinter.CTkTextbox(new_window, width = 400, height = 200)
-    textbox.pack(padx = 20, pady=20)
+# Open a window that asks AI what we'll be doing
+def open_chat_window():
+    chat_window = customtkinter.CTkToplevel()  # fixed
+    chat_window.title("Chat Window")
+    chat_window.geometry("800x600")
 
-    textbox.insert("0.0", "Please enter your inqueries here!")
-    content = textbox.get("0.0", "end")
+    ai_button = customtkinter.CTkButton(chat_window, text = "Ask AI for Assignment Changes", command = ask_ai)
+    ai_button.pack(padx=20, pady=20)
+
+
+def ask_ai():
+    print("\nGoing to ask a question!")
+    send_ai_question_to_server(course_assignments)
 
 # Button that allows for inputting login token
 button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)

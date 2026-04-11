@@ -5,6 +5,7 @@ from canvasapi import Canvas
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from datetime import datetime
 
 # Load dot environment
 load_dotenv() 
@@ -19,18 +20,32 @@ token_saved = ""
 client = genai.Client()
 
 # Ask AI a question to assist with Canvas
-def ask_ai_question(instructions, response):
-    response = client.models.generate_content(
-        model="gemini-3-flash-preview", config = types.GenerateContentConfig(system_instruction = instructions),
-        contents = response)
+def ask_ai_question(prompt):
+    # Convert the list of assignment dicts into a readable string for Gemini
+    # Regex-like conversion of our JSON file into a string for it to parse properly
+    if isinstance(prompt, list):
+        prompt = "\n".join(
+            f"- {a['name']} (due: {a['due_at']})" for a in prompt
+        )
+    # Will state prompt and generate user response to their question
+    print(f"Question received: {prompt}")
+    print("Generating response to user's question!")
+    result = client.models.generate_content(
+        model="gemini-2.5-flash",
+        config=types.GenerateContentConfig(
+            system_instruction="You are an online advisor for students "
+            "attending San Diego State University, you will be given a list of their assignments within an individual course, and you will need to list which assignments "
+            "take priority over others. Use the specific courses it gavev you, and order them from 1 to however many there are. Do so in a nurturing tone."),
+        contents=prompt)
     
-    print(response.text)
+    print(result.text)
+    return result.text
 
 # Retrieve our global token
 def getToken(token_value):
     global token_saved
     token_saved = token_value
-    print(f"Token received and saved: {token_saved}")  # Added print
+    print(f"Token received and saved: {token_saved}")
     return f"Token '{token_saved}' saved successfully."
 
 # Fetch specific Canvas data from the user token so they know what they're receiving. 
@@ -79,7 +94,6 @@ def fetch_unlock_date(assignments):
     return all_due_dates
 
 
-
 # Begin local host server to allow for two programs to communicate with one another
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -88,7 +102,7 @@ def start_server():
     print("Server listening on localhost:12345")
     
     while True:
-        # Create a clent socket and what we'll be adding
+        # Create a client socket and what we'll be adding
         client_socket, addr = server_socket.accept()
         print(f"Connection from {addr}")
         # Allows us to transmit more bytes to allow for quicker transfer of larger data
@@ -98,23 +112,65 @@ def start_server():
         data = json.loads(raw)
 
         # Convert our data into JSON for our course information
-        # Later we can use the same server to collect the data for assignments later, not all at once.
-        if data["type"] == "courses":
-            getToken(data["token"])
-            # Optionally fetch and print Canvas data
-            canvas_result = fetch_canvas_data()
-            response = {
-                "courses": [{"name": course.name,"course_code": course.course_code} for course in canvas_result]
-            }
-        # Grab course assignments and their data
-        elif data["type"] == "assignments":
-            canvas_result = fetch_canvas_data()
-            assignment_result = fetch_assignment_data(canvas_result)
-            # Each assginment has their name and their due date, could easily implement when they submitted the assignment too
-            response = {
-                "assignments": [{"name": assignment.name, "due_at": assignment.due_at} for assignment in assignment_result]
-            }
-            
+        try:
+            if data["type"] == "courses":
+                getToken(data["token"])
+                canvas_result = fetch_canvas_data()
+                response = {
+                    "courses": [
+                    {
+                        "name": course.name,
+                        "course_code": course.course_code,
+                        # For submission times later
+                        "id": course.id
+                    }
+                        for course in canvas_result
+                    ]
+                }
+
+            # Grab course assignments and filter to only unfinished ones
+            elif data["type"] == "assignments":
+                getToken(data["token"])
+                canvas = Canvas(CANVAS_API_URL, token_saved)
+                course = canvas.get_course(data["course_id"])
+                assignment_result = list(course.get_assignments())
+                user_data = fetch_user_data(canvas)
+                submission_result = fetch_submission_time(assignment_result, user_data)
+
+                # Build a lookup map from assignment_id -> assignment object
+                # so we can go from submission -> assignment name/due_at
+                assignment_map = {assignment.id: assignment for assignment in assignment_result}
+
+                # Filter submissions not yet submitted
+                unfinished_submissions = [
+                    submission for submission in submission_result
+                    if submission.submitted_at is None
+                ]
+
+                # Use submission.assignment_id to pull the matching assignment details
+                response = {
+                    "assignments": [
+                        {
+                            "assignment_id": submission.assignment_id,
+                            "name": assignment_map[submission.assignment_id].name
+                                if submission.assignment_id in assignment_map else "Unknown",
+                            "due_at": assignment_map[submission.assignment_id].due_at
+                                if submission.assignment_id in assignment_map else None,
+                        }
+                        for submission in unfinished_submissions
+                    ]
+                }
+
+            # Will ask the AI a question and print in the server terminal for now
+            elif data["type"] == "ai_question":
+                print("AI question handler reached")  # does it get here?
+                ai_response = ask_ai_question(data["response"])
+                response = {"ai_response": ai_response}
+        except Exception as e:
+            # In case there is an error within gemini, this will let us know. 
+            print(f"Server error: {e}") 
+            response = {"error": str(e)}
+
         # Convert JSON with data
         final_response = json.dumps(response)
         client_socket.send(final_response.encode('utf-8'))
@@ -122,4 +178,3 @@ def start_server():
 
 if __name__ == "__main__":
     start_server()
-
