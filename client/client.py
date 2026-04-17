@@ -107,10 +107,14 @@ def open_chat_window():
     ai_button = customtkinter.CTkButton(chat_window, text = "Ask AI for Assignment Changes", command = ask_ai)
     ai_button.pack(padx=20, pady=20)
 
-
+# When asking the AI, it can get buffered and struggle with responding to the request I sent out, so you must 
+# give it time to recover
 def ask_ai():
-    print("\nGoing to ask a question!")
-    send_ai_question_to_server(course_assignments)
+    print("\nGoing to ask a question!\n")
+    ai_response = send_ai_question_to_server(course_assignments)
+    print("\nQueston has been answered!\n")
+    print(ai_response)
+    print("\nOnce you finish, you can close this specific window, though wait a bit before sending out another request!\n")
 
 # Button that allows for inputting login token
 button = customtkinter.CTkButton(app, text="Open Login Request", command=token_click_event)

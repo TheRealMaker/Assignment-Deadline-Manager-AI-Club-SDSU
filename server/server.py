@@ -21,11 +21,13 @@ client = genai.Client()
 
 # Ask AI a question to assist with Canvas
 def ask_ai_question(prompt):
+    # For comparing today's date to the other assignments with a due date
+    now = datetime.now() 
     # Convert the list of assignment dicts into a readable string for Gemini
     # Regex-like conversion of our JSON file into a string for it to parse properly
     if isinstance(prompt, list):
         prompt = "\n".join(
-            f"- {a['name']} (due: {a['due_at']})" for a in prompt
+            f"- {a['name']} (due: {a['due_at']})" for a in prompt 
         )
     # Will state prompt and generate user response to their question
     print(f"Question received: {prompt}")
@@ -33,11 +35,11 @@ def ask_ai_question(prompt):
     result = client.models.generate_content(
         model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
-            system_instruction="You are an online advisor for students "
+            system_instruction= "You are an online advisor for students "
             "attending San Diego State University, you will be given a list of their assignments within an individual course, and you will need to list which assignments "
-            "take priority over others. Use the specific courses it gavev you, and order them from 1 to however many there are. Do so in a nurturing tone."),
+            "take priority over others. Use the specific courses they give you, and order them from 1 to however many there are. The current date is " + str(now) + ". Thus, only "
+            "talk about assignments that are due after this date. Respond in a supportive demeanor, please."),
         contents=prompt)
-    
     print(result.text)
     return result.text
 
