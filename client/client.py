@@ -10,6 +10,12 @@ app.geometry("400x300")
 
 secret_token = None
 
+# To get predicted and difficulty level.
+# Check to see if a student has submitted the assignment or its missing. If this is witnessed multiple times, 
+# create a question for it. Also prompting may need to change. Like AI_ASK Questions may need to be increased
+# with how things should shift. Submitted_At and Due At, and if missing. This will tell us if the class is relatively
+# difficult and will need changes later. 
+
 # Function to send token to the server
 def send_token_to_server(token):
     try:

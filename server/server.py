@@ -38,7 +38,9 @@ def ask_ai_question(prompt):
             system_instruction= "You are an online advisor for students "
             "attending San Diego State University, you will be given a list of their assignments within an individual course, and you will need to list which assignments "
             "take priority over others. Use the specific courses they give you, and order them from 1 to however many there are. The current date is " + str(now) + ". Thus, only "
-            "talk about assignments that are due after this date. Respond in a supportive demeanor, please."),
+            "talk about assignments that are due after this date. Place some emojis where you see fit. Rank the difficulty based on how long the submission was from the due date"
+            "and estimate how long certain assignments may take based on the difference between submitted_at and due_date. If the difference is small, then it will likely be more difficult"
+            "Respond in a supportive demeanor, please."),
         contents=prompt)
     print(result.text)
     return result.text
@@ -95,7 +97,6 @@ def fetch_unlock_date(assignments):
         all_due_dates.append(assignment.created_at)
     return all_due_dates
 
-
 # Begin local host server to allow for two programs to communicate with one another
 def start_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -149,6 +150,12 @@ def start_server():
                     if submission.submitted_at is None
                 ]
 
+                # Finished submissions already submitted
+                finished_submissions = [
+                    submission for submission in submission_result
+                    if submission.submitted_at is not None
+                ]
+
                 # Use submission.assignment_id to pull the matching assignment details
                 response = {
                     "assignments": [
@@ -158,8 +165,9 @@ def start_server():
                                 if submission.assignment_id in assignment_map else "Unknown",
                             "due_at": assignment_map[submission.assignment_id].due_at
                                 if submission.assignment_id in assignment_map else None,
+                            "submitted_at": submission.submitted_at
                         }
-                        for submission in unfinished_submissions
+                        for submission in finished_submissions
                     ]
                 }
 
