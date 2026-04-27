@@ -19,11 +19,11 @@ const api = {
     });
     return r.json();
   },
-  async ai(assignments) {
+  async ai({ pending, finished, message, token }) {
     const r = await fetch("/api/ai", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignments }),
+      body: JSON.stringify({ pending, finished, message, token }),
     });
     return r.json();
   },
@@ -31,22 +31,18 @@ const api = {
 
 /* ── Helpers ──────────────────────────────────────────────────────────────── */
 function fmtDate(iso) {
-  if (!iso) return "—";
+  if (!iso || iso === "No due date") return "No due date";
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
   });
 }
 
-/**
- * Difficulty: based on gap between submitted_at and due_at.
- * Small gap (< 6h) = Hard, medium (6–48h) = Medium, large (> 48h) = Easy.
- * If no submitted_at, treat as unknown.
- */
 function getDifficulty(due_at, submitted_at) {
-  if (!due_at || !submitted_at) return { label: "Unknown", cls: "diff-unknown" };
+  if (!submitted_at) return { label: "Pending", cls: "diff-unknown" };
+  if (!due_at || due_at === "No due date") return { label: "Unknown", cls: "diff-unknown" };
   const due = new Date(due_at);
   const sub = new Date(submitted_at);
-  const gapHours = (due - sub) / 36e5; // positive = submitted before due
+  const gapHours = (due - sub) / 36e5;
 
   if (gapHours < 0) return { label: "Late", cls: "diff-late" };
   if (gapHours < 6) return { label: "Hard", cls: "diff-hard" };
@@ -55,7 +51,7 @@ function getDifficulty(due_at, submitted_at) {
 }
 
 /* ── Donut chart ──────────────────────────────────────────────────────────── */
-function Donut({ pct, label = "" }) {
+function Donut({ pct }) {
   const r = 26, circ = 2 * Math.PI * r;
   const filled = (pct / 100) * circ;
   return (
@@ -83,7 +79,6 @@ function CalendarView({ allAssignments }) {
   const MONTHS = ["January","February","March","April","May","June",
                   "July","August","September","October","November","December"];
 
-  // Mark days where assignments were submitted
   const submittedDays = new Set(
     allAssignments
       .filter(a => a.submitted_at)
@@ -94,10 +89,9 @@ function CalendarView({ allAssignments }) {
       .filter(Boolean)
   );
 
-  // Mark days where assignments were due
   const dueDays = new Set(
     allAssignments
-      .filter(a => a.due_at)
+      .filter(a => a.due_at && a.due_at !== "No due date")
       .map(a => {
         const d = new Date(a.due_at);
         return d.getFullYear() === year && d.getMonth() === month ? d.getDate() : null;
@@ -174,7 +168,7 @@ function ScheduleView({ courses }) {
 }
 
 /* ── Chat ─────────────────────────────────────────────────────────────────── */
-function ChatView({ activeAssignments }) {
+function ChatView({ activeAssignments, token }) {
   const [msgs, setMsgs] = useState([
     { role: "ai", text: "Hi! I'm your SDSU deadline assistant. Select a course and click \"Ask AI\" to get difficulty rankings and prioritized advice, or ask me anything." },
   ]);
@@ -186,16 +180,15 @@ function ChatView({ activeAssignments }) {
 
   async function send(textOverride) {
     const text = textOverride || input.trim();
-    if (!text && !textOverride) return;
+    if (!text) return;
     setInput("");
     setMsgs(m => [...m, { role: "user", text }]);
     setLoading(true);
 
-    const toSend = activeAssignments.length > 0
-      ? activeAssignments
-      : [{ name: text, due_at: null, submitted_at: null }];
+    const pending = activeAssignments.pending || [];
+    const finished = activeAssignments.finished || [];
 
-    const data = await api.ai(toSend);
+    const data = await api.ai({ pending, finished, message: text, token });
     setLoading(false);
     setMsgs(m => [...m, { role: "ai", text: data.ai_response || data.error || "No response." }]);
   }
@@ -232,6 +225,8 @@ function ChatView({ activeAssignments }) {
 /* ── Class / Dashboard ────────────────────────────────────────────────────── */
 function ClassView({ course, token, onAskAI, setActiveAssignments }) {
   const [assignments, setAssignments] = useState(null);
+  const [pending, setPending] = useState([]);
+  const [finished, setFinished] = useState([]);
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState("");
@@ -242,41 +237,46 @@ function ClassView({ course, token, onAskAI, setActiveAssignments }) {
     setAiResult("");
     setLoading(true);
     api.assignments(token, course.id).then(d => {
-      const list = d.assignments || [];
-      setAssignments(list);
-      setActiveAssignments(list);
+      const p = d.pending || [];
+      const f = d.finished || [];
+      setPending(p);
+      setFinished(f);
+      setAssignments([...p, ...f]);
+      setActiveAssignments({ pending: p, finished: f });
       setLoading(false);
     });
   }, [course?.id]);
 
   async function handleAskAI() {
-    if (!assignments?.length) return;
+    if (!pending.length && !finished.length) return;
     setAiLoading(true);
-    const d = await api.ai(assignments);
+    const d = await api.ai({
+      pending,
+      finished,
+      message: "Please prioritize my assignments.",
+      token,
+    });
     setAiResult(d.ai_response || d.error || "No response.");
     setAiLoading(false);
     onAskAI();
   }
 
-  // Difficulty score: fraction of "Hard" or "Late" submissions
-  const diffScore = assignments
+  const diffScore = finished.length
     ? Math.round(
-        (assignments.filter(a => {
+        (finished.filter(a => {
           const diff = getDifficulty(a.due_at, a.submitted_at);
           return diff.label === "Hard" || diff.label === "Late";
-        }).length /
-          Math.max(assignments.length, 1)) * 100
+        }).length / finished.length) * 100
       )
     : 0;
 
   return (
     <div className="view-body">
       {!course && <p className="empty-msg">Select a course from the sidebar.</p>}
-
-      {course && loading && <p className="empty-msg">Loading submissions…</p>}
+      {course && loading && <p className="empty-msg">Loading assignments…</p>}
 
       {course && assignments && assignments.length === 0 && (
-        <p className="empty-msg">No submitted assignments found for this course.</p>
+        <p className="empty-msg">No assignments found for this course.</p>
       )}
 
       {course && assignments && assignments.length > 0 && (
@@ -284,16 +284,18 @@ function ClassView({ course, token, onAskAI, setActiveAssignments }) {
           {/* Stats row */}
           <div className="stats-row">
             <div className="stat-card">
+              <div className="stat-label">Pending</div>
+              <div className="stat-value">{pending.length}</div>
+            </div>
+            <div className="stat-card">
               <div className="stat-label">Submitted</div>
-              <div className="stat-value">{assignments.length}</div>
+              <div className="stat-value">{finished.length}</div>
             </div>
             <div className="stat-card">
               <div className="stat-label">Hard / Late</div>
-              <div className="stat-value red">{assignments.filter(a => ["Hard","Late"].includes(getDifficulty(a.due_at, a.submitted_at).label)).length}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">Easy</div>
-              <div className="stat-value green">{assignments.filter(a => getDifficulty(a.due_at, a.submitted_at).label === "Easy").length}</div>
+              <div className="stat-value red">
+                {finished.filter(a => ["Hard","Late"].includes(getDifficulty(a.due_at, a.submitted_at).label)).length}
+              </div>
             </div>
           </div>
 
@@ -312,24 +314,55 @@ function ClassView({ course, token, onAskAI, setActiveAssignments }) {
             <Donut pct={diffScore} />
           </div>
 
-          {/* Assignment list */}
-          <div className="section-label" style={{ marginTop: 4 }}>Submitted assignments</div>
-          {assignments.map(a => {
-            const diff = getDifficulty(a.due_at, a.submitted_at);
-            return (
-              <div key={a.assignment_id} className="due-item">
-                <div className="due-info">
-                  <div className="due-name">{a.name}</div>
-                  <div className="due-meta">
-                    <span className="meta-item">Due {fmtDate(a.due_at)}</span>
-                    <span className="meta-sep">·</span>
-                    <span className="meta-item">Submitted {fmtDate(a.submitted_at)}</span>
+          {/* Pending assignments */}
+          {pending.length > 0 && (
+            <>
+              <div className="section-label" style={{ marginTop: 16 }}>Upcoming assignments</div>
+              {pending.map(a => {
+                const diff = a.difficulty || { label: "Unknown", cls: "diff-unknown" };
+                return (
+                  <div key={a.assignment_id} className="due-item">
+                    <div className="due-info">
+                      <div className="due-name">{a.name}</div>
+                      <div className="due-meta">
+                        <span className="meta-item">Due {fmtDate(a.due_at)}</span>
+                        {diff.label !== "Unknown" && (
+                          <>
+                            <span className="meta-sep">·</span>
+                            <span className="meta-item">Based on past work</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`diff-tag ${diff.cls}`}>{diff.label}</span>
                   </div>
-                </div>
-                <span className={`diff-tag ${diff.cls}`}>{diff.label}</span>
-              </div>
-            );
-          })}
+                );
+              })}
+            </>
+          )}
+
+          {/* Finished assignments */}
+          {finished.length > 0 && (
+            <>
+              <div className="section-label" style={{ marginTop: 16 }}>Submitted assignments</div>
+              {finished.map(a => {
+                const diff = getDifficulty(a.due_at, a.submitted_at);
+                return (
+                  <div key={a.assignment_id} className="due-item">
+                    <div className="due-info">
+                      <div className="due-name">{a.name}</div>
+                      <div className="due-meta">
+                        <span className="meta-item">Due {fmtDate(a.due_at)}</span>
+                        <span className="meta-sep">·</span>
+                        <span className="meta-item">Submitted {fmtDate(a.submitted_at)}</span>
+                      </div>
+                    </div>
+                    <span className={`diff-tag ${diff.cls}`}>{diff.label}</span>
+                  </div>
+                );
+              })}
+            </>
+          )}
 
           {/* AI result inline */}
           {aiResult && (
@@ -392,7 +425,7 @@ export default function App() {
   const [courses, setCourses] = useState([]);
   const [activeCourse, setActiveCourse] = useState(null);
   const [activeView, setActiveView] = useState("class");
-  const [activeAssignments, setActiveAssignments] = useState([]);
+  const [activeAssignments, setActiveAssignments] = useState({ pending: [], finished: [] });
   const [allAssignments, setAllAssignments] = useState([]);
 
   function handleLogin(tok, courseList) {
@@ -405,11 +438,12 @@ export default function App() {
     setActiveView("class");
   }
 
-  function mergeAssignments(newOnes) {
-    setActiveAssignments(newOnes);
+  function mergeAssignments({ pending, finished }) {
+    setActiveAssignments({ pending, finished });
     setAllAssignments(prev => {
       const ids = new Set(prev.map(a => a.assignment_id));
-      return [...prev, ...newOnes.filter(a => !ids.has(a.assignment_id))];
+      const all = [...pending, ...finished];
+      return [...prev, ...all.filter(a => !ids.has(a.assignment_id))];
     });
   }
 
@@ -467,7 +501,9 @@ export default function App() {
         )}
         {activeView === "calendar" && <CalendarView allAssignments={allAssignments} />}
         {activeView === "schedule" && <ScheduleView courses={courses} />}
-        {activeView === "chat" && <ChatView activeAssignments={activeAssignments} />}
+        {activeView === "chat" && (
+          <ChatView activeAssignments={activeAssignments} token={token} />
+        )}
       </main>
     </div>
   );
